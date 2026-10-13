@@ -2,50 +2,55 @@ name: build
 
 on:
   workflow_dispatch:
+
 jobs:
   build:
     runs-on: ubuntu-latest
+
     strategy:
       fail-fast: false
       matrix:
-    device: [m21]
-    rom: [oneui]
-    ksu: [1]
+        device: [m21]
+        rom: [oneui]
+        ksu: [1]
 
-    name: "🚧 ${{matrix.device}} ${{matrix.rom}} KSU=${{matrix.ksu}}"
+    name: "🚧 ${{ matrix.device }} ${{ matrix.rom }} KSU=${{ matrix.ksu }}"
+
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
+          submodules: recursive
 
       - name: Install packages & setup
         run: |
           sudo apt update
-          sudo apt install bison flex libssl-dev python3 python-is-python3 libarchive-tools -y
+          sudo apt install bison flex libssl-dev python3 python-is-python3 libarchive-tools zip curl git -y
+
           mkdir -p toolchain
           cd toolchain
+
           echo 'Download antman and sync'
           bash <(curl -s "https://raw.githubusercontent.com/Neutron-Toolchains/antman/main/antman") -S=05012024
+
           echo 'Patch for glibc'
           bash <(curl -s "https://raw.githubusercontent.com/Neutron-Toolchains/antman/main/antman") --patch=glibc
+
           echo 'Done'
 
-      - name: Run build 
+      - name: Run build
         run: |
-          export DEVICE=${{matrix.device}}
-          DEVICE=${{matrix.device}} ROM=${{matrix.rom}} KSU=${{matrix.ksu}} SELINUX=e bash build_kernel.sh
-          
+          DEVICE="${{ matrix.device }}" \
+          ROM="${{ matrix.rom }}" \
+          KSU="${{ matrix.ksu }}" \
+          SELINUX=e bash build_kernel.sh
+
       - name: Upload kernel
         uses: actions/upload-artifact@v4
+        if: always()
         with:
-          name: GrassKernel_${{matrix.device}}_${{matrix.rom}}_KSU.zip
-          path: kernel_zip/
-
-      - name: Upload to Telegram
-        uses: appleboy/telegram-action@master
-        with:
-          to: ${{ secrets.TELEGRAM_CHAT_ID }}
-          token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          document: kernel_zip/GRASS*.zip
-          message: "Grass Build For ${{matrix.device}} ${{matrix.rom}} Completed"
+          name: GrassKernel_${{ matrix.device }}_${{ matrix.rom }}_KSU
+          path: kernel_zip/*.zip
+          if-no-files-found: error
+          retention-days: 7
